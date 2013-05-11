@@ -6,6 +6,7 @@ import (
     "time"
     "log"
     "buspirate"
+    "fmt"
 )
 
 // const (
@@ -27,13 +28,25 @@ func main() {
         log.Fatal(err)
     }
 
-    // bp.Reset()
-    // bp.BinaryMode()
+    //bp.Reset()
+    bp.BinaryMode()
 
-    i2c := buspirate.NewI2C("")
-    i2c.Init()
+
+    m, err := bp.GetMode()
+    fmt.Printf("MODE: %s\n", m)
+
+    // bp.ShortTest()
+    // bp.LongTest()
+
+    i2c, err := bp.ModeI2C()
+    if err != nil {
+        log.Fatal(err)
+   }
+ 
     i2c.Power(true)
-    time.Sleep(1000 * time.Millisecond)
+    i2c.Pullups(true)
+    time.Sleep(3000 * time.Millisecond)
     i2c.Power(false)
+    i2c.Pullups(false)
     return
 }

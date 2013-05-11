@@ -47,113 +47,109 @@ type I2C struct {
     periphs uint8
 }
 
-func NewI2C(dev string) *I2C {
-
-    i2c := I2C{Bp: NewBP(dev), periphs: I2C_SET_PERIPH}
-
-    return &i2c
+func NewI2C(bp *BP) *I2C {
+    return &I2C{Bp: bp, periphs: I2C_SET_PERIPH}
 } //NewI2C()
 
-func (i2c *I2C) Mode() error {
-    bp := i2c.Bp
 
-    // log.Printf("The Buffer: %q\n", bp.buf)
-    found, err := bp.WriteReadCHK([]byte{0x02}, "I2C1")
-    if err != nil {
-        return err
-    }
+func (i2c *I2C) setPeriph(bit uint8, on bool) error {
 
-    if found {
-        log.Printf("Entered I2C mode.")
-        return nil
-    }
-
-    // log.Printf("Unable to enter I2C mode, The Buffer: %q\n", bp.buf)
-    err = errors.New("Unable to enter I2C mode")
-    log.Fatal(err)
-
-    return err
-} //Mode()
-
-func (i2c *I2C) Init() error {
-
-    bp := i2c.Bp
-
-    err := bp.Init()
-    if err != nil {
-        return err
-    }
-
-    err = bp.BinaryMode()
-    if err != nil {
-        return err
-    }
-
-    m_err := i2c.Mode()
-    if m_err != nil {
-        //Try again, but see if we can break out the current mode first.
-        m_err = bp.Break()
-        if m_err != nil {
-            return m_err
-        }
-
-        m_err = bp.BinaryMode()
-        if m_err != nil {
-            return m_err
-        }
-
-        m_err = i2c.Mode()
-    }
-
-    if m_err != nil {
-        log.Printf("Unable to enter I2C mode, The Buffer: %q\n", bp.buf)
-        err = errors.New("Unable to enter I2C mode")
-        log.Fatal(err)
-
-        return m_err
-    }
-
-
-    return nil
-} //Init()
-
-func (i2c *I2C) periph(mask uint8, on bool) error {
-
-    bp := i2c.Bp
+    log.Printf("setPeriph %b\n", on)
 
     if on {
-        i2c.periphs |= mask
-    } else {
-        i2c.periphs &= (0xFF ^ mask)
+        return i2c.Bp.SetPinsIn(bit, string(0x01))
     }
 
-    log.Printf("Periph: mask:%x, periphs: %x\n", mask, i2c.periphs)
-    found, err := bp.WriteReadCHK([]byte{I2C_SET_PERIPH | i2c.periphs}, string(0x01))
+    return i2c.Bp.SetPinsOut(bit, string(0x01))
+} //setPeriph()
+
+func (i2c *I2C) Power(on bool) error {
+    log.Printf("Power %b\n", on)
+    return i2c.setPeriph(I2C_PERIPH_POWER, on)
+} //Power()
+
+func (i2c *I2C) Pullups(on bool) error {
+    log.Printf("Pullups %b\n", on)
+    return i2c.setPeriph(I2C_PERIPH_PULLUPS, on)
+} //Pullups()
+
+func (i2c *I2C) AUX(on bool) error {
+    log.Printf("AUX %b\n", on)
+    return i2c.setPeriph(I2C_PERIPH_AUX, on)
+} //AUX()
+
+
+func (i2c *I2C) CS(on bool) error {
+    log.Printf("CS %b\n", on)
+    return i2c.setPeriph(I2C_PERIPH_CS, on)
+} //CS()
+
+// func (i2c *I2C) Sniff() error {
+// } //Sniff()
+
+func (i2c *I2C) Start() error {
+    return i2c.Bp.writeFind([]uint8{I2C_SEND_START}, string(0x01))
+} //Start()
+
+func (i2c *I2C) Stop() error {
+    return i2c.Bp.writeFind([]uint8{I2C_SEND_STOP}, string(0x01))
+} //Stop()
+
+func (i2c *I2C) ACK() error {
+    return i2c.Bp.writeFind([]uint8{I2C_SEND_ACK}, string(0x01))
+} //ACK()
+
+func (i2c *I2C) NACK() error {
+    return i2c.Bp.writeFind([]uint8{I2C_SEND_NACK}, string(0x01))
+} //NACK()
+
+func (i2c *I2C) ReadByte() (uint8, error) {
+    i2c.Bp.buf[0] = 0
+    err := i2c.Bp.writeFind([]uint8{I2C_READ_BYTE}, "")
+    return i2c.Bp.buf[0], err
+} //ReadByte()
+
+func (i2c *I2C) setSpeed(speed uint8) error {
+    err := i2c.Bp.writeFind([]uint8{I2C_SET_SPEED | speed}, string(0x01))
     if err != nil {
         return err
     }
 
-    if found {
-        // log.Printf("Set peripheral mask %x\n", i2c.periphs)
-        return nil
+    return nil
+} //setSpeed()
+
+func (i2c *I2C) SetSpeed5() error {
+   return i2c.setSpeed(I2C_SPEED_5)
+} //SetSpeed5()
+
+func (i2c *I2C) SetSpeed50() error {
+   return i2c.setSpeed(I2C_SPEED_50)
+} //SetSpeed50()
+
+func (i2c *I2C) SetSpeed100() error {
+   return i2c.setSpeed(I2C_SPEED_100)
+} //SetSpeed100()
+
+func (i2c *I2C) SetSpeed400() error {
+   return i2c.setSpeed(I2C_SPEED_400)
+} //SetSpeed400()
+
+func (i2c *I2C) SendBytes(bytes []uint8) error {
+
+    if len(bytes) > 16 {
+        return errors.New("Can't send more than 16 bytes at a time")
     }
 
-    log.Printf("Unable set Peripheral mask: %x\n", i2c.periphs)
-    err = errors.New("Unable set Peripheral mask")
-    log.Fatal(err)
+    bp := i2c.Bp
+    _, err := bp.Serial.Write([]uint8{I2C_BULK_SEND | uint8(len(bytes)-1)})
+    if err != nil {
+        return err
+    }
 
-    return err
-} //periph()
+    err = bp.writeFind(bytes, string(0x01))
+    if err != nil {
+        return err
+    }
 
-func (i2c *I2C) Power(on bool) error {
-    log.Printf("Power\n")
-    return i2c.periph(I2C_PERIPH_POWER, on)
-
-    // } else {
-    //     log.Printf("Power Off\n")
-    //     // i2c.periphs &^= I2C_PERIPH_POWER
-    //     return i2c.periph(0xFF ^ I2C_PERIPH_POWER)
-    // }
-
-    // return i2c.periph()
-} //Power()
+    return nil
+} //SendBytes()
