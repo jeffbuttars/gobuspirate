@@ -21,16 +21,16 @@ const (
     // 0100wxyz – Configure peripherals w=power, x=pullups, y=AUX, z=CS
     // 011000xx – Set I2C speed, 3=~400kHz, 2=~100kHz, 1=~50kHz, 0=~5kHz
 
-    I2C_EXIT = 0x00
-    I2C_VERSION = 0x01
+    // I2C_EXIT = 0x00
+    // I2C_VERSION = 0x01
     I2C_SEND_START = 0x02
     I2C_SEND_STOP = 0x03
     I2C_READ_BYTE = 0x04
     I2C_SEND_ACK = 0x06
     I2C_SEND_NACK = 0x07
-    I2C_SNIFFER = 0x0F
+    // I2C_SNIFFER = 0x0F
     I2C_BULK_SEND = 0x10
-    I2C_SET_PERIPH = 0x40
+    // I2C_SET_PERIPH = 0x40
     I2C_PERIPH_POWER = 0x08
     I2C_PERIPH_PULLUPS = 0x04
     I2C_PERIPH_AUX = 0x02
@@ -44,11 +44,10 @@ const (
 
 type I2C struct {
     Bp *BP
-    periphs uint8
 }
 
 func NewI2C(bp *BP) *I2C {
-    return &I2C{Bp: bp, periphs: I2C_SET_PERIPH}
+    return &I2C{Bp: bp}
 } //NewI2C()
 
 
@@ -88,29 +87,32 @@ func (i2c *I2C) CS(on bool) error {
 // } //Sniff()
 
 func (i2c *I2C) Start() error {
-    return i2c.Bp.writeFind([]uint8{I2C_SEND_START}, string(0x01))
+    _, err := i2c.Bp.writeFind([]uint8{I2C_SEND_START}, string(0x01))
+    return err
 } //Start()
 
 func (i2c *I2C) Stop() error {
-    return i2c.Bp.writeFind([]uint8{I2C_SEND_STOP}, string(0x01))
+    _, err := i2c.Bp.writeFind([]uint8{I2C_SEND_STOP}, string(0x01))
+    return err
 } //Stop()
 
 func (i2c *I2C) ACK() error {
-    return i2c.Bp.writeFind([]uint8{I2C_SEND_ACK}, string(0x01))
+    _, err := i2c.Bp.writeFind([]uint8{I2C_SEND_ACK}, string(0x01))
+    return err
 } //ACK()
 
 func (i2c *I2C) NACK() error {
-    return i2c.Bp.writeFind([]uint8{I2C_SEND_NACK}, string(0x01))
+    _, err := i2c.Bp.writeFind([]uint8{I2C_SEND_NACK}, string(0x01))
+    return err
 } //NACK()
 
 func (i2c *I2C) ReadByte() (uint8, error) {
-    i2c.Bp.buf[0] = 0
-    err := i2c.Bp.writeFind([]uint8{I2C_READ_BYTE}, "")
-    return i2c.Bp.buf[0], err
+    bytes, err := i2c.Bp.writeFind([]uint8{I2C_READ_BYTE}, "")
+    return bytes[0], err
 } //ReadByte()
 
 func (i2c *I2C) setSpeed(speed uint8) error {
-    err := i2c.Bp.writeFind([]uint8{I2C_SET_SPEED | speed}, string(0x01))
+    _, err := i2c.Bp.writeFind([]uint8{I2C_SET_SPEED | speed}, string(0x01))
     if err != nil {
         return err
     }
@@ -146,7 +148,7 @@ func (i2c *I2C) SendBytes(bytes []uint8) error {
         return err
     }
 
-    err = bp.writeFind(bytes, string(0x01))
+    _, err = bp.writeFind(bytes, string(0x01))
     if err != nil {
         return err
     }

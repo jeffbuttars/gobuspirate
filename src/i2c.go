@@ -42,7 +42,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
    }
- 
+
     i2c.Power(true)
     i2c.Pullups(true)
     time.Sleep(3000 * time.Millisecond)
