@@ -29,6 +29,10 @@ const (
     MODE_RAW = 0x05
     GET_MODE = 0x01
 
+    MODE_BB_REPLY = "BBIO1"
+    MODE_HIZ_REPLY1 = "\r\nHiZ>"
+    MODE_HIZ_REPLY2 = "\n\nHiZ>"
+
     HW_TEST_SHORT = 0x10
     HW_TEST_LONG = 0x11
 
@@ -40,7 +44,7 @@ const (
     SET_PINS_HIGH_LOW = 0x80
 
     DEFAULT_TIMEOUT = 100
-    // DEFAULT_TIMEOUT = 200
+    // DEFAULT_TIMEOUT = 100
 )
 
 type BP struct {
@@ -93,20 +97,20 @@ func (bp *BP) Init() error {
         read_byte := bp.read_byte
         read_err := bp.read_err
 
-        log.Printf("Starting reader...")
+        // log.Printf("Starting reader...")
         for {
-            log.Printf("Reader TOP of loop")
+            // log.Printf("Reader TOP of loop")
             n, err := fd.Read(buf)
             if err != nil || n == 0 {
                 read_err <- err
                 break
             }
-            log.Printf("Reader %d:%q", n, buf[:n])
+            // log.Printf("Reader %d:%q", n, buf[:n])
             for i:=0; i<n; i++ {
-                    log.Printf("pushing %q", buf[i])
+                    // log.Printf("pushing %q", buf[i])
                     read_byte <- buf[i]
             }
-            log.Printf("Reader BOTTOM of loop")
+            // log.Printf("Reader BOTTOM of loop")
         }
     }()
     // 'Yield', let the reader start in the background
@@ -114,6 +118,28 @@ func (bp *BP) Init() error {
 
     return nil
 } //Init()
+
+func (bp *BP) strBytesCmp(inb []uint8, str string) bool {
+
+    if len(str) > len(inb) {
+        return false
+    }
+
+    if fmt.Sprintf("%s", inb[:len(str)]) == str {
+        return true
+    }
+
+    return false
+} //strBytesCmp()
+
+func (bp *BP) isHiz(inb []uint8) bool {
+    return bp.strBytesCmp(inb, MODE_HIZ_REPLY1) ||
+        bp.strBytesCmp(inb, MODE_HIZ_REPLY2)
+} //isHiz()
+
+func (bp *BP) isBB(inb []uint8) bool {
+    return bp.strBytesCmp(inb, MODE_BB_REPLY)
+} //isBB()
 
 func (bp *BP) readBytes() ([]uint8, error) {
 
@@ -140,17 +166,21 @@ func (bp *BP) readBytes() ([]uint8, error) {
 } //readBytes()
 
 func (bp *BP) ReadNB() ([]uint8, error) {
-        log.Printf("ReadNB start...\n")
+        // log.Printf("ReadNB start...\n")
 
         res, err := bp.readBytes()
         if err != nil {
            return res, err
         }
 
+        if len(res) > 0 {
+            return res, nil
+        }
+
         // If we're using a read timeout, wait for the
         // timeout period and try to get more bytes later.
         if bp.ReadTimeout > 0 {
-            log.Printf("ReadNB second read\n")
+            // log.Printf("ReadNB second read\n")
             time.Sleep(bp.ReadTimeout)
             res2, err2 := bp.readBytes()
             res = append(res, res2...)
@@ -159,7 +189,7 @@ func (bp *BP) ReadNB() ([]uint8, error) {
             }
         }
 
-        log.Printf("ReadNB bottom: %q\n", res)
+        // log.Printf("ReadNB bottom: %q\n", res)
         return res, nil
 } //ReadNB()
 
@@ -168,7 +198,7 @@ func (bp *BP) ReadNB() ([]uint8, error) {
 // result
 func (bp *BP) WriteReadCHK(data []uint8, chk string) ([]uint8, bool, error) {
 
-        log.Printf("WriteReadCHK data:%q, chk:%q\n", data, chk)
+        // log.Printf("WriteReadCHK data:%q, chk:%q\n", data, chk)
         found := false
 
         bytes, err := bp.WriteRead(data)
@@ -178,15 +208,10 @@ func (bp *BP) WriteReadCHK(data []uint8, chk string) ([]uint8, bool, error) {
         }
 
         // If chk is empty, always return a find.
-        if len(chk) == 0 {
-            found = true
-        } else if len(chk) > len(bytes) {
-            found = false
-        } else if fmt.Sprintf("%s", bytes[:len(chk)]) == chk {
+        if len(chk) == 0 || bp.strBytesCmp(bytes, chk) {
             found = true
         }
-
-        log.Printf("WriteReadCHK compare got:%q, expected:%q\n", bytes, chk)
+        // log.Printf("WriteReadCHK compare got:%q, expected:%q\n", bytes, chk)
 
         return bytes, found, nil
 }
@@ -208,14 +233,15 @@ func (bp *BP) writeFind(data []uint8, chk string) ([]uint8, error) {
 
 func (bp *BP) WriteRead(data []uint8) ([]uint8, error) {
 
-    log.Printf("WriteRead, writing: %q\n", data)
+    // log.Printf("WriteRead, writing: %X:%q", data, data)
 
-    n, err := bp.Serial.Write(data)
+    // n, err := bp.Serial.Write(data)
+    _, err := bp.Serial.Write(data)
     if err != nil {
         log.Fatal(err)
         return nil, err
     }
-    log.Printf("WriteRead n:%d, len(data):%d", n, len(data))
+    // log.Printf("WriteRead n:%d, len(data):%d", n, len(data))
 
     bytes, err := bp.ReadNB()
     if err != nil {
@@ -223,7 +249,7 @@ func (bp *BP) WriteRead(data []uint8) ([]uint8, error) {
         return bytes, err
     }
 
-    log.Printf("WriteRead read: %d:%q\n", len(bytes), bytes)
+    // log.Printf("WriteRead read: %d:%q\n", len(bytes), bytes)
 
     return bytes, nil
 } //WriteRead()
@@ -310,13 +336,11 @@ func (bp *BP) Reset() error {
         0x0D, 0x0D, 0x0D, 0x0D, 0x0D,
         0x0D, 0x0D, 0x0D, 0x0D, 0x0D }
 
-    hiz := "\r\nHiZ>"
-    hizp := "\n\nHiZ>"
     var bytes []uint8
 
     for k, _ := range rst_bits {
 
-        bytes, found, err := bp.WriteReadCHK(rst_bits[k:k+1], hiz)
+        bytes, found, err := bp.WriteReadCHK(rst_bits[k:k+1], MODE_HIZ_REPLY1)
 
         if err != nil {
             log.Fatal(err)
@@ -329,26 +353,33 @@ func (bp *BP) Reset() error {
             return nil
         } else {
             // maybe we got hizp? Kind of weird.
-            if fmt.Sprintf("%s", bytes[:len(hizp)]) == hizp {
-                log.Printf("Reset, 10 enters, Reset Good!")
+            if bp.isHiz(bytes) {
+                    log.Printf("Reset, 10 enters, Reset Good!")
+                    bp.state = STATE_INITIAL
+                    return nil
+            }
+            log.Printf("Reset, looking for %q, got: %q",
+                        MODE_HIZ_REPLY2, bytes)
+            // We may be in BB mode, let's check
+            if bp.isBB(bytes) {
+                log.Printf("We're in Binary mode already!")
                 bp.state = STATE_INITIAL
                 return nil
             }
-            log.Printf("Reset, looking for %q, got: %q",
-                        hiz, bytes)
         }
     }
 
     // Are we in binary mode?
-    if fmt.Sprintf("%s", bytes[:5]) == "BBIO1" {
+    if bp.isBB(bytes) {
         log.Printf("Reset, 10 enters, Reset Good!")
         bp.state = STATE_INITIAL
         return nil
     }
 
-    bytes, err := bp.writeFind([]uint8{'#', 0x0D}, hiz)
+    bytes, err := bp.WriteRead([]uint8{'#', 0x0D})
+    found := bp.isHiz(bytes)
 
-    if err != nil {
+    if err != nil || !found{
         log.Fatal(err)
         log.Printf(
             "Reset #, looking for HiZ>, got: %q\n Don't expect this to work!\n",
@@ -380,9 +411,8 @@ func (bp *BP) BinaryMode() error {
                   0, 0, 0, 0, 0, 0,
                   0, 0, 0, 0, 0, 0,
                   0, 0, 0, 0, 0, 0 }
-    bmi := "BBIO1"
     for k, _ := range bm {
-        _, err := bp.writeFind(bm[k:k+1], bmi)
+        _, err := bp.writeFind(bm[k:k+1], MODE_BB_REPLY)
         if err == nil {
             log.Printf("Entered Binary mode")
             bp.state = STATE_BINARY

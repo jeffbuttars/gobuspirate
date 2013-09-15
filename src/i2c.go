@@ -3,10 +3,11 @@ package main
 
 import (
     // "github.com/tarm/goserial"
-    "time"
+    // "time"
     "log"
     "buspirate"
     "fmt"
+    "pwm"
 )
 
 // const (
@@ -45,8 +46,21 @@ func main() {
 
     i2c.Power(true)
     i2c.Pullups(true)
-    time.Sleep(3000 * time.Millisecond)
+    // fmt.Printf("Starting scan...\n")
+    // scan_res := i2c.Scan()
+    // for _, v := range scan_res  {
+    //     if (v & 0x01) == 0x01 {
+    //         fmt.Printf("0x%2.2X(0x%2.2X R)\n",  v >> 1, v)
+    //     } else {
+    //         fmt.Printf("0x%2.2X(0x%2.2X W)\n", v >> 1, v)
+    //     }
+    // }
+
+    // time.Sleep(300 * time.Millisecond)
+
+    pwm.AllOn(i2c, 0, 4095)
     i2c.Power(false)
     i2c.Pullups(false)
+
     return
 }
